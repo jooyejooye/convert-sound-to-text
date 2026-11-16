@@ -1,0 +1,47 @@
+name: audio-to-text-bot
+
+on:
+  schedule:
+    # 30분마다 새 글 확인. 필요하면 주기 수정 (예: "0 * * * *" = 매시 정각)
+    - cron: "*/30 * * * *"
+  workflow_dispatch: {}  # 수동으로도 실행 가능 (Actions 탭에서 Run workflow 버튼)
+
+permissions:
+  contents: write  # last_seen.json을 저장소에 다시 커밋하기 위해 필요
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Run bot
+        env:
+          SITE_ID: ${{ secrets.SITE_ID }}
+          SITE_PW: ${{ secrets.SITE_PW }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python main.py
+
+      - name: Commit last_seen.json if changed
+        run: |
+          git config user.name "audio-bot"
+          git config user.email "audio-bot@users.noreply.github.com"
+          if ! git diff --quiet -- last_seen.json; then
+            git add last_seen.json
+            git commit -m "update last_seen.json [skip ci]"
+            git push
+          else
+            echo "변경 없음, 커밋 생략"
+          fi
